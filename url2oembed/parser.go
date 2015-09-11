@@ -86,8 +86,8 @@ func (p *Parser) skipRedirectIfFoundOembed(req *http.Request, via []*http.Reques
 }
 
 func (p *Parser) init() {
-	p.MaxHTMLBodySize = 40000
-	p.MaxBinaryBodySize = 1024
+	p.MaxHTMLBodySize = 50000
+	p.MaxBinaryBodySize = 4096
 	p.WaitTimeout = 10 * time.Second
 }
 
@@ -111,8 +111,9 @@ func (p *Parser) Parse(u string) *oembed.Info {
 		}
 		////
 		if len(info.ThumbnailURL) > 0 && width == 0 {
-			data, err := p.fetchURL(info.ThumbnailURL)
+			data, newURL, err := p.fetchURL(info.ThumbnailURL)
 			if err == nil {
+				info.ThumbnailURL = newURL
 				config, _, err := image.DecodeConfig(bytes.NewReader(data))
 				if err == nil {
 					info.ThumbnailWidth = json.Number(strconv.FormatInt(int64(config.Width), 10))
@@ -141,7 +142,7 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 	}
 
 	// fetch url
-	data, err := p.fetchURL(u)
+	data, newURL, err := p.fetchURL(u)
 
 	if err != nil {
 		if e, ok := err.(*url.Error); ok {
@@ -154,12 +155,14 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 					return ei
 				}
 
-				data, err = p.fetchURL(u)
+				data, newURL, err = p.fetchURL(u)
 			}
 		}
 	}
 
 	if data != nil {
+		u = newURL
+
 		contentType := http.DetectContentType(data)
 
 		if imageTypeRegex.MatchString(contentType) {
@@ -229,13 +232,15 @@ func (p *Parser) FetchOembedFromHTML(pageURL string, data []byte) *oembed.Info {
 	return info.GenerateOembedFor(pageURL)
 }
 
-func (p *Parser) fetchURL(url string) (data []byte, err error) {
+func (p *Parser) fetchURL(url string) (data []byte, u string, err error) {
 	resp, err := p.client.Get(url)
 	if err != nil {
 		return
 	}
 
 	defer resp.Body.Close()
+
+	u = resp.Request.URL.String()
 
 	contentType := resp.Header.Get("Content-Type")
 
