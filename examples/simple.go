@@ -21,7 +21,7 @@ func main() {
 
 	parser := url2oembed.NewParser(oe)
 
-	data := parser.Parse("http://mashable.com/2015/09/11/troye-sivan-wild-taylor-swift/")
+	data := parser.Parse("http://youtube.com")
 
 	fmt.Printf("%s\n", data)
 }

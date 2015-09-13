@@ -32,6 +32,7 @@ type Parser struct {
 	MaxHTMLBodySize   int64
 	MaxBinaryBodySize int64
 	WaitTimeout       time.Duration
+	fetchURLCalls     int
 }
 
 // OembedRedirectGoodError is a hack to stop following redirects and get oembed resource
@@ -68,9 +69,11 @@ func NewParser(oe *oembed.Oembed) *Parser {
 }
 
 func (p *Parser) skipRedirectIfFoundOembed(req *http.Request, via []*http.Request) error {
-	if len(via) >= 10 {
+	if p.fetchURLCalls >= 10 {
 		return errors.New("stopped after 10 redirects")
 	}
+
+	p.fetchURLCalls++
 
 	if p.oe == nil {
 		return nil
@@ -98,6 +101,7 @@ func (p *Parser) Parse(u string) *oembed.Info {
 		p.client = &http.Client{Timeout: p.WaitTimeout, Transport: transport, CheckRedirect: p.skipRedirectIfFoundOembed}
 	}
 
+	p.fetchURLCalls = 0
 	info := p.parseOembed(u)
 
 	// and now we try to set missing image sizes
@@ -111,6 +115,7 @@ func (p *Parser) Parse(u string) *oembed.Info {
 		}
 		////
 		if len(info.ThumbnailURL) > 0 && width == 0 {
+			p.fetchURLCalls = 0
 			data, newURL, err := p.fetchURL(info.ThumbnailURL)
 			if err == nil {
 				info.ThumbnailURL = newURL
@@ -135,7 +140,7 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 		if item != nil {
 			// try to extract information
 			ei, _ := item.FetchOembed(u, p.client)
-			if ei != nil {
+			if ei != nil && ei.Status < 300 {
 				return ei
 			}
 		}
@@ -145,18 +150,25 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 	data, newURL, err := p.fetchURL(u)
 
 	if err != nil {
-		if e, ok := err.(*url.Error); ok {
-			if e, ok := e.Err.(*OembedRedirectGoodError); ok {
+		for {
+			if e, ok := err.(*url.Error); ok {
+				if e, ok := e.Err.(*OembedRedirectGoodError); ok {
+					item = e.GetItem()
+					// TODO: optimize this.. calling the same code 2 times
+					ei, _ := item.FetchOembed(e.GetURL(), p.client)
+					if ei != nil && ei.Status < 300 {
+						return ei
+					}
 
-				item = e.GetItem()
-				// TODO: optimize this.. calling the same code 2 times
-				ei, _ := item.FetchOembed(e.GetURL(), p.client)
-				if ei != nil {
-					return ei
+					data, newURL, err = p.fetchURL(e.GetURL())
+
+					if err != nil {
+						continue
+					}
 				}
-
-				data, newURL, err = p.fetchURL(u)
 			}
+
+			break
 		}
 	}
 
@@ -233,6 +245,8 @@ func (p *Parser) FetchOembedFromHTML(pageURL string, data []byte) *oembed.Info {
 }
 
 func (p *Parser) fetchURL(url string) (data []byte, u string, err error) {
+	p.fetchURLCalls++
+
 	resp, err := p.client.Get(url)
 	if err != nil {
 		return
