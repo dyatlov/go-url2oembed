@@ -8,6 +8,7 @@ import (
 	"image"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -33,6 +34,12 @@ type Parser struct {
 	MaxBinaryBodySize int64
 	WaitTimeout       time.Duration
 	fetchURLCalls     int
+
+	// list of IP addresses to blacklist
+	BlacklistedIPs []net.IP
+
+	// list of IP addresses to whitelist
+	WhitelistedIPs []net.IP
 }
 
 // OembedRedirectGoodError is a hack to stop following redirects and get oembed resource
@@ -94,10 +101,82 @@ func (p *Parser) init() {
 	p.WaitTimeout = 10 * time.Second
 }
 
+func (p *Parser) isBlacklistedIP(addr net.IP) bool {
+	// if whitelisted then return false
+	for _, w := range p.WhitelistedIPs {
+		if w.Equal(addr) {
+			return false
+		}
+	}
+
+	// if blacklisted then return true
+	for _, b := range p.BlacklistedIPs {
+		if b.Equal(addr) {
+			return true
+		}
+	}
+
+	// by default we disable local addresses and bradcast ones
+	return !addr.IsGlobalUnicast()
+}
+
+func (p *Parser) filterBlacklistedIPs(addrs []net.IP) ([]net.IP, bool) {
+	isBlacklisted := false
+
+	var whiteListed []net.IP
+
+	for _, a := range addrs {
+		if p.isBlacklistedIP(a) {
+			isBlacklisted = true
+		} else {
+			whiteListed = append(whiteListed, a)
+		}
+	}
+
+	return whiteListed, isBlacklisted
+}
+
+// Dial is used to disable access to blacklisted IP addresses
+func (p *Parser) Dial(network, addr string) (net.Conn, error) {
+	var (
+		host, port string
+		err        error
+		addrs      []net.IP
+	)
+
+	if host, port, err = net.SplitHostPort(addr); err != nil {
+		return nil, err
+	}
+
+	if addrs, err = net.LookupIP(host); err != nil {
+		return nil, err
+	}
+
+	if whiteListed, isBlacklisted := p.filterBlacklistedIPs(addrs); isBlacklisted {
+		if len(whiteListed) == 0 {
+			return nil, errors.New("Host is blacklisted")
+		}
+		// select first good one
+		firstGood := whiteListed[0]
+		if len(whiteListed) > 1 {
+			for _, candidate := range whiteListed[1:] {
+				if candidate.To4() != nil { // we prefer IPv4
+					firstGood = candidate
+					break
+				}
+			}
+		}
+
+		addr = net.JoinHostPort(firstGood.String(), port)
+	}
+
+	return net.Dial(network, addr)
+}
+
 // Parse parses an url and returns structurized representation
 func (p *Parser) Parse(u string) *oembed.Info {
 	if p.client == nil {
-		transport := &http.Transport{DisableKeepAlives: true}
+		transport := &http.Transport{DisableKeepAlives: true, Dial: p.Dial}
 		p.client = &http.Client{Timeout: p.WaitTimeout, Transport: transport, CheckRedirect: p.skipRedirectIfFoundOembed}
 	}
 
