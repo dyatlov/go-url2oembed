@@ -10,6 +10,20 @@ import (
 	"github.com/dyatlov/go-url2oembed/url2oembed"
 )
 
+// StringsToNetworks converts arrays of string representation of IP ranges into []*net.IPnet slice
+func StringsToNetworks(ss []string) ([]*net.IPNet, error) {
+	var result []*net.IPNet
+	for _, s := range ss {
+		_, network, err := net.ParseCIDR(s)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, network)
+	}
+
+	return result, nil
+}
+
 func main() {
 	providersData, err := ioutil.ReadFile("providers.json")
 
@@ -21,7 +35,9 @@ func main() {
 	oe.ParseProviders(bytes.NewReader(providersData))
 
 	parser := url2oembed.NewParser(oe)
-	parser.BlacklistedIPs = []net.IP{net.ParseIP("195.59.58.240"), net.ParseIP("77.67.21.248")}
+	if parser.BlacklistedIPNetworks, err = StringsToNetworks([]string{"195.59.58.240/32"}); err != nil {
+		panic(err)
+	}
 
 	data := parser.Parse("http://mashable.com/2015/09/11/troye-sivan-wild-taylor-swift/")
 

@@ -36,10 +36,10 @@ type Parser struct {
 	fetchURLCalls     int
 
 	// list of IP addresses to blacklist
-	BlacklistedIPs []net.IP
+	BlacklistedIPNetworks []*net.IPNet
 
 	// list of IP addresses to whitelist
-	WhitelistedIPs []net.IP
+	WhitelistedIPNetworks []*net.IPNet
 }
 
 // OembedRedirectGoodError is a hack to stop following redirects and get oembed resource
@@ -103,15 +103,15 @@ func (p *Parser) init() {
 
 func (p *Parser) isBlacklistedIP(addr net.IP) bool {
 	// if whitelisted then return false
-	for _, w := range p.WhitelistedIPs {
-		if w.Equal(addr) {
+	for _, w := range p.WhitelistedIPNetworks {
+		if w.Contains(addr) {
 			return false
 		}
 	}
 
 	// if blacklisted then return true
-	for _, b := range p.BlacklistedIPs {
-		if b.Equal(addr) {
+	for _, b := range p.BlacklistedIPNetworks {
+		if b.Contains(addr) {
 			return true
 		}
 	}
