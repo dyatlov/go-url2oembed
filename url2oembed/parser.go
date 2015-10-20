@@ -195,7 +195,7 @@ func (p *Parser) Parse(u string) *oembed.Info {
 		////
 		if len(info.ThumbnailURL) > 0 && width == 0 {
 			p.fetchURLCalls = 0
-			data, newURL, err := p.fetchURL(info.ThumbnailURL)
+			data, newURL, _, err := p.fetchURL(info.ThumbnailURL)
 			if err == nil {
 				info.ThumbnailURL = newURL
 				config, _, err := image.DecodeConfig(bytes.NewReader(data))
@@ -214,6 +214,8 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 	// check if we have it oembeded
 	var item *oembed.Item
 
+	var srvContentType string
+
 	if p.oe != nil {
 		item := p.oe.FindItem(u)
 		if item != nil {
@@ -226,7 +228,7 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 	}
 
 	// fetch url
-	data, newURL, err := p.fetchURL(u)
+	data, newURL, srvContentType, err := p.fetchURL(u)
 
 	if err != nil {
 		for {
@@ -239,7 +241,7 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 						return ei
 					}
 
-					data, newURL, err = p.fetchURL(e.GetURL())
+					data, newURL, srvContentType, err = p.fetchURL(e.GetURL())
 
 					if err != nil {
 						continue
@@ -261,7 +263,7 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 		}
 
 		if htmlTypeRegex.MatchString(contentType) {
-			return p.FetchOembedFromHTML(u, data)
+			return p.FetchOembedFromHTML(u, data, srvContentType)
 		}
 
 		return p.getLinkInfo(u)
@@ -310,20 +312,20 @@ func (p *Parser) getLinkInfo(u string) *oembed.Info {
 }
 
 // FetchOembedFromHTML returns information extracted from html page
-func (p *Parser) FetchOembedFromHTML(pageURL string, data []byte) *oembed.Info {
+func (p *Parser) FetchOembedFromHTML(pageURL string, data []byte, contentType string) *oembed.Info {
 	buf := bytes.NewReader(data)
 	info := htmlinfo.NewHTMLInfo()
 	info.Client = p.client
 	info.AllowOembedFetching = true
 
-	if info.Parse(buf, &pageURL) != nil {
+	if info.Parse(buf, &pageURL, &contentType) != nil {
 		return nil
 	}
 
 	return info.GenerateOembedFor(pageURL)
 }
 
-func (p *Parser) fetchURL(url string) (data []byte, u string, err error) {
+func (p *Parser) fetchURL(url string) (data []byte, u string, contentType string, err error) {
 	p.fetchURLCalls++
 
 	resp, err := p.client.Get(url)
@@ -335,7 +337,7 @@ func (p *Parser) fetchURL(url string) (data []byte, u string, err error) {
 
 	u = resp.Request.URL.String()
 
-	contentType := resp.Header.Get("Content-Type")
+	contentType = resp.Header.Get("Content-Type")
 
 	var reader io.Reader
 
