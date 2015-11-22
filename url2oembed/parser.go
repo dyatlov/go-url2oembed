@@ -30,6 +30,7 @@ import (
 type Parser struct {
 	oe                *oembed.Oembed
 	client            *http.Client
+	AcceptLanguage    string
 	MaxHTMLBodySize   int64
 	MaxBinaryBodySize int64
 	WaitTimeout       time.Duration
@@ -98,6 +99,7 @@ func (p *Parser) skipRedirectIfFoundOembed(req *http.Request, via []*http.Reques
 func (p *Parser) init() {
 	p.MaxHTMLBodySize = 50000
 	p.MaxBinaryBodySize = 4096
+	p.AcceptLanguage = "en-us"
 	p.WaitTimeout = 10 * time.Second
 }
 
@@ -316,6 +318,7 @@ func (p *Parser) FetchOembedFromHTML(pageURL string, data []byte, contentType st
 	buf := bytes.NewReader(data)
 	info := htmlinfo.NewHTMLInfo()
 	info.Client = p.client
+	info.AcceptLanguage = p.AcceptLanguage
 	info.AllowOembedFetching = true
 
 	if info.Parse(buf, &pageURL, &contentType) != nil {
@@ -328,7 +331,15 @@ func (p *Parser) FetchOembedFromHTML(pageURL string, data []byte, contentType st
 func (p *Parser) fetchURL(url string) (data []byte, u string, contentType string, err error) {
 	p.fetchURLCalls++
 
-	resp, err := p.client.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+
+	if err != nil {
+		return
+	}
+
+	req.Header.Add("Accept-Language", p.AcceptLanguage)
+
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return
 	}
