@@ -31,6 +31,7 @@ type Parser struct {
 	oe                *oembed.Oembed
 	client            *http.Client
 	AcceptLanguage    string
+	UserAgent         string
 	MaxHTMLBodySize   int64
 	MaxBinaryBodySize int64
 	WaitTimeout       time.Duration
@@ -93,6 +94,11 @@ func (p *Parser) skipRedirectIfFoundOembed(req *http.Request, via []*http.Reques
 		return &OembedRedirectGoodError{url: req.URL.String(), item: item}
 	}
 
+	// mutate the subsequent redirect requests with the first Header
+	for key, val := range via[0].Header {
+		req.Header[key] = val
+	}
+
 	return nil
 }
 
@@ -100,6 +106,7 @@ func (p *Parser) init() {
 	p.MaxHTMLBodySize = 50000
 	p.MaxBinaryBodySize = 4096
 	p.AcceptLanguage = "en-us"
+	p.UserAgent = "ProcLink Bot http://proc.link"
 	p.WaitTimeout = 10 * time.Second
 }
 
@@ -338,6 +345,7 @@ func (p *Parser) fetchURL(url string) (data []byte, u string, contentType string
 	}
 
 	req.Header.Add("Accept-Language", p.AcceptLanguage)
+	req.Header.Set("User-Agent", p.UserAgent)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
