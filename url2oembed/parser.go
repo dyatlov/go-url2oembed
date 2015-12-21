@@ -2,7 +2,6 @@ package url2oembed
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -12,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strconv"
 	"time"
 
 	// to fetch gif info from url
@@ -194,14 +192,7 @@ func (p *Parser) Parse(u string) *oembed.Info {
 
 	// and now we try to set missing image sizes
 	if info != nil {
-		// TODO: need to optimize this block, thats too much for 0 checking
-		var width int64
-		var err error
-		width, err = info.ThumbnailWidth.Int64()
-		if err != nil {
-			width = 0
-		}
-		////
+		width := info.ThumbnailWidth
 		if len(info.ThumbnailURL) > 0 && width == 0 {
 			p.fetchURLCalls = 0
 			data, newURL, _, err := p.fetchURL(info.ThumbnailURL)
@@ -209,8 +200,8 @@ func (p *Parser) Parse(u string) *oembed.Info {
 				info.ThumbnailURL = newURL
 				config, _, err := image.DecodeConfig(bytes.NewReader(data))
 				if err == nil {
-					info.ThumbnailWidth = json.Number(strconv.FormatInt(int64(config.Width), 10))
-					info.ThumbnailHeight = json.Number(strconv.FormatInt(int64(config.Height), 10))
+					info.ThumbnailWidth = uint64(config.Width)
+					info.ThumbnailHeight = uint64(config.Height)
 				}
 			}
 		}
@@ -297,8 +288,8 @@ func (p *Parser) getImageInfo(u string, data []byte) *oembed.Info {
 	info.ProviderName = pu.Host
 
 	if err == nil {
-		info.Width = json.Number(strconv.FormatInt(int64(config.Width), 10))
-		info.Height = json.Number(strconv.FormatInt(int64(config.Height), 10))
+		info.Width = uint64(config.Width)
+		info.Height = uint64(config.Height)
 	}
 
 	return info

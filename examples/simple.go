@@ -39,7 +39,7 @@ func main() {
 		panic(err)
 	}
 
-	data := parser.Parse("http://mashable.com/2015/09/11/troye-sivan-wild-taylor-swift/")
+	data := parser.Parse("http://techcrunch.com/2010/11/02/365-days-10-million-3-rounds-2-companies-all-with-5-magic-slides/")
 
 	fmt.Printf("%s\n", data)
 }
