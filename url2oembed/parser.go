@@ -220,7 +220,7 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 		item := p.oe.FindItem(u)
 		if item != nil {
 			// try to extract information
-			ei, _ := item.FetchOembed(u, p.client)
+			ei, _ := item.FetchOembed(oembed.Options{URL: u, Client: p.client})
 			if ei != nil && ei.Status < 300 {
 				return ei
 			}
@@ -236,7 +236,7 @@ func (p *Parser) parseOembed(u string) *oembed.Info {
 				if e, ok := e.Err.(*OembedRedirectGoodError); ok {
 					item = e.GetItem()
 					// TODO: optimize this.. calling the same code 2 times
-					ei, _ := item.FetchOembed(e.GetURL(), p.client)
+					ei, _ := item.FetchOembed(oembed.Options{URL: e.GetURL(), Client: p.client})
 					if ei != nil && ei.Status < 300 {
 						return ei
 					}
